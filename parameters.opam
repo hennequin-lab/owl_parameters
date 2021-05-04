@@ -1,0 +1,17 @@
+opam-version: "2.0"
+maintainer: "Guillaume Hennequin"
+authors: [ "Guillaume Hennequin" ]
+license: "MIT"
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+]
+depends: [
+  "ocaml" {>= "4.10.0"}
+  "dune" {build & >= "1.1.0"}
+  "stdio"
+  "base"
+  "owl" {>= "1.0"}
+  "yojson"
+  "ppx_deriving_yojson"
+]
+synopsis: "Simple module to handle parameter packing/unpacking"
