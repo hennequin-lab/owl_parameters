@@ -180,8 +180,14 @@ module Make (B : Basic) = struct
         ())
 end
 
+module Empty = Make (struct
+  type 'a prm = unit
+
+  let map ~f:_ () = ()
+  let fold ?prefix:_ ~init ~f:_ () = init
+end)
+
 let with_prefix ?prefix s =
   match prefix with
   | None -> s
   | Some p -> p ^ "." ^ s
-

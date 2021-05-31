@@ -43,5 +43,6 @@ module type T = sig
 end
 
 module Make (B : Basic) : T with type 'a prm = 'a B.prm
+module Empty : T with type 'a prm = unit
 
 val with_prefix : ?prefix:String.t -> String.t -> String.t
