@@ -180,6 +180,12 @@ module Make (B : Basic) = struct
         ())
 end
 
+let with_prefix ?prefix s =
+  match prefix with
+  | None -> s
+  | Some p -> p ^ "." ^ s
+
+
 module Empty = Make (struct
   type 'a prm = unit
 
@@ -187,7 +193,12 @@ module Empty = Make (struct
   let fold ?prefix:_ ~init ~f:_ () = init
 end)
 
-let with_prefix ?prefix s =
-  match prefix with
-  | None -> s
-  | Some p -> p ^ "." ^ s
+module Single (X : sig
+  val label : string
+end) =
+Make (struct
+  type 'a prm = 'a
+
+  let map ~f x = f x
+  let fold ?prefix ~init ~f x = f init (x, with_prefix ?prefix X.label)
+end)

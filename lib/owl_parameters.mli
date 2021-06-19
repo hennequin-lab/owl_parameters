@@ -42,7 +42,11 @@ module type T = sig
   val save_to_files : ?prefix:String.t -> prms:p -> unit
 end
 
+val with_prefix : ?prefix:String.t -> String.t -> String.t
+
 module Make (B : Basic) : T with type 'a prm = 'a B.prm
 module Empty : T with type 'a prm = unit
 
-val with_prefix : ?prefix:String.t -> String.t -> String.t
+module Single (X : sig
+  val label : string
+end) : T with type 'a prm = 'a
