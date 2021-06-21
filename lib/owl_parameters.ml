@@ -1,15 +1,20 @@
 open Base
 open Owl
 
+type pos =
+  | Global
+  | Local
+[@@deriving yojson]
+
 type 'a tag =
   | Pinned of 'a
   | Learned of 'a
   | Learned_bounded of 'a * float option * float option
 [@@deriving yojson]
 
-type t = AD.t tag [@@deriving to_yojson]
+type t = pos * AD.t tag [@@deriving to_yojson]
 type h = AD.t -> t
-type setter = ?above:float -> ?below:float -> AD.t -> t
+type setter = ?above:float -> ?below:float -> AD.t -> AD.t tag
 
 let pinned ?above:_ ?below:_ x = Pinned x
 
@@ -19,28 +24,34 @@ let learned ?above ?below x =
   | _ -> Learned_bounded (x, above, below)
 
 
-let numel = function
+let numel (_, x) =
+  match x with
   | Pinned x -> AD.numel x
   | Learned x -> AD.numel x
   | Learned_bounded (x, _, _) -> AD.numel x
 
 
-let pin = function
-  | Pinned x -> Pinned x
-  | Learned x -> Pinned x
-  | Learned_bounded (x, _, _) -> Pinned x
+let pin (p, x) =
+  ( p
+  , match x with
+    | Pinned x -> Pinned x
+    | Learned x -> Pinned x
+    | Learned_bounded (x, _, _) -> Pinned x )
 
 
-let extract = function
+let extract (_, x) =
+  match x with
   | Pinned x -> x
   | Learned x -> x
   | Learned_bounded (x, _, _) -> x
 
 
-let map f = function
-  | Pinned x -> Pinned (f x)
-  | Learned x -> Learned (f x)
-  | Learned_bounded (x, lb, ub) -> Learned_bounded (f x, lb, ub)
+let map f (p, x) =
+  ( p
+  , match x with
+    | Pinned x -> Pinned (f x)
+    | Learned x -> Learned (f x)
+    | Learned_bounded (x, lb, ub) -> Learned_bounded (f x, lb, ub) )
 
 
 module type Packer = sig
@@ -82,10 +93,10 @@ module Packer () = struct
       AD.pack_arr theta, lb, ub
 
 
-  let rec pack ?f prm =
+  let rec pack ?f (p, prm) =
     let open AD in
     match prm with
-    | Pinned x -> fun _ -> Pinned x
+    | Pinned x -> fun _ -> p, Pinned x
     | Learned (F x) ->
       Int.incr i;
       let x =
@@ -102,12 +113,12 @@ module Packer () = struct
           | Some (_, f) -> f y
           | None -> y
         in
-        Learned y
+        p, Learned y
     | Learned_bounded (F x, l, u) ->
       Option.iter l ~f:(fun l -> lb := (!i + 1, 1, l) :: !lb);
       Option.iter u ~f:(fun u -> ub := (!i + 1, 1, u) :: !ub);
-      let ft = pack ?f (Learned (F x)) in
-      fun theta -> Learned_bounded (extract (ft theta), l, u)
+      let ft = pack ?f (p, Learned (F x)) in
+      fun theta -> p, Learned_bounded (extract (ft theta), l, u)
     | Learned (Arr x) ->
       Int.incr i;
       let s = Owl.Arr.shape x in
@@ -127,15 +138,15 @@ module Packer () = struct
           | Some (_, f) -> f y
           | None -> y
         in
-        Learned y
+        p, Learned y
       in
       i := !i + Owl.Mat.numel x - 1;
       f
     | Learned_bounded (Arr x, l, u) ->
       Option.iter l ~f:(fun l -> lb := (!i + 1, Owl.Arr.numel x, l) :: !lb);
       Option.iter u ~f:(fun u -> ub := (!i + 1, Owl.Arr.numel x, u) :: !ub);
-      let ft = pack ?f (Learned (Arr x)) in
-      fun theta -> Learned_bounded (extract (ft theta), l, u)
+      let ft = pack ?f (p, Learned (Arr x)) in
+      fun theta -> p, Learned_bounded (extract (ft theta), l, u)
     | _ -> assert false
 end
 

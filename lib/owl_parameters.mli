@@ -1,21 +1,26 @@
 open Base
 
+type pos =
+  | Global
+  | Local
+[@@deriving yojson]
+
 type 'a tag =
   | Pinned of 'a
   | Learned of 'a
   | Learned_bounded of 'a * float option * float option
 [@@deriving yojson]
 
-type t = AD.t tag [@@deriving to_yojson]
+type t = pos * AD.t tag [@@deriving to_yojson]
 type h = AD.t -> t
-type setter = ?above:float -> ?below:float -> AD.t -> t
+type setter = ?above:float -> ?below:float -> AD.t -> AD.t tag
 
 val pinned : setter
 val learned : setter
 val numel : t -> int
 val pin : t -> t
-val extract : 'a tag -> 'a
-val map : ('a -> 'b) -> 'a tag -> 'b tag
+val extract : pos * 'a tag -> 'a
+val map : ('a -> 'b) -> pos * 'a tag -> pos * 'b tag
 
 module type Packer = sig
   val pack : ?f:(AD.t -> AD.t) * (AD.t -> AD.t) -> t -> h

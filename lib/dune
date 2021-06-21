@@ -1,8 +1,8 @@
 (library
  (name owl_parameters)
  (wrapped true)
- (public_name owl-parameters)
- (libraries stdio base owl yojson ppx_deriving_yojson.runtime)
+ (public_name owl-parameters.mpi)
+ (libraries stdio base owl yojson ppx_deriving_yojson.runtime comm)
  (preprocess
   (pps ppx_deriving_yojson)))
 
