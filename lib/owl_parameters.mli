@@ -24,7 +24,14 @@ val map : ('a -> 'b) -> pos * 'a tag -> pos * 'b tag
 
 module type Packer = sig
   val pack : ?f:(AD.t -> AD.t) * (AD.t -> AD.t) -> t -> h
-  val finalize : Unit.t -> AD.t * Owl.Mat.mat option * Owl.Mat.mat option
+
+  val finalize
+    :  Unit.t
+    -> AD.t
+       * Owl.Mat.mat option
+       * Owl.Mat.mat option
+       * (Owl.Mat.mat -> unit)
+       * (Owl.Mat.mat -> unit)
 end
 
 module Packer () : Packer

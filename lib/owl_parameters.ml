@@ -56,7 +56,14 @@ let map f (p, x) =
 
 module type Packer = sig
   val pack : ?f:(AD.t -> AD.t) * (AD.t -> AD.t) -> t -> h
-  val finalize : Unit.t -> AD.t * Owl.Mat.mat option * Owl.Mat.mat option
+
+  val finalize
+    :  Unit.t
+    -> AD.t
+       * Owl.Mat.mat option
+       * Owl.Mat.mat option
+       * (Owl.Mat.mat -> unit)
+       * (Owl.Mat.mat -> unit)
 end
 
 module Packer () = struct
@@ -64,10 +71,34 @@ module Packer () = struct
   let v = ref []
   let lb = ref []
   let ub = ref []
+  let shared = ref []
+
+  let share shared =
+    let shared = Array.of_list shared in
+    fun theta ->
+      shared
+      |> Array.map ~f:(fun slice -> Owl.Mat.get_slice slice theta)
+      |> C.broadcast
+      |> Array.iteri ~f:(fun i xi -> Owl.Mat.set_slice shared.(i) theta xi)
+
+
+  let collect_gradients shared =
+    let shared = Array.of_list shared in
+    fun theta ->
+      shared
+      |> Array.map ~f:(fun slice -> Owl.Mat.get_slice slice theta)
+      |> C.allgather (* n_nodes x n_slices *)
+      |> Array.transpose
+      |> fun v ->
+      Option.value_exn v
+      |> Array.iteri ~f:(fun i xi ->
+             let xi = xi |> Owl.Mat.concatenate ~axis:0 |> Owl.Mat.sum ~axis:0 in
+             Owl.Mat.set_slice shared.(i) theta xi)
+
 
   let finalize () =
     match !v with
-    | [] -> AD.Mat.empty 0 0, None, None
+    | [] -> AD.Mat.empty 0 0, None, None, (fun _ -> ()), fun _ -> ()
     | z ->
       let theta = z |> List.rev |> Array.of_list |> Mat.concatenate ~axis:1 in
       let lb =
@@ -90,7 +121,13 @@ module Packer () = struct
               Mat.set_slice [ []; [ i; i + len - 1 ] ] ub b);
           Some ub
       in
-      AD.pack_arr theta, lb, ub
+      AD.pack_arr theta, lb, ub, share !shared, collect_gradients !shared
+
+
+  let add_shared_slice p s =
+    match p with
+    | Global -> shared := s :: !shared
+    | Local -> ()
 
 
   let rec pack ?f (p, prm) =
@@ -106,6 +143,7 @@ module Packer () = struct
       in
       v := Owl.Mat.create 1 1 x :: !v;
       let ii = !i in
+      add_shared_slice p [ []; [ ii ] ];
       fun theta ->
         let y = Maths.get_item theta 0 ii in
         let y =
@@ -130,8 +168,10 @@ module Packer () = struct
       let x = Owl.Mat.reshape x [| 1; -1 |] in
       v := x :: !v;
       let ii = !i in
+      let n = Owl.Mat.numel x in
+      add_shared_slice p [ []; [ ii; ii + n - 1 ] ];
       let f theta =
-        let y = Maths.get_slice [ [ 0 ]; [ ii; ii + Owl.Mat.numel x - 1 ] ] theta in
+        let y = Maths.get_slice [ [ 0 ]; [ ii; ii + n - 1 ] ] theta in
         let y = Maths.reshape y s in
         let y =
           match f with
@@ -178,8 +218,8 @@ module Make (B : Basic) = struct
   let unpack (h : ph) v = map h ~f:(fun h -> h v)
 
   let save_to_files ?prefix ~(prms : p) =
-    fold ?prefix prms ~init:() ~f:(fun () (prm, descr) ->
-        let prm = extract prm |> AD.primal' in
+    fold ?prefix prms ~init:() ~f:(fun () ((pos, prm), descr) ->
+        let prm = extract (pos, prm) |> AD.primal' in
         let prm =
           match prm with
           | F x -> Mat.create 1 1 x
@@ -187,8 +227,9 @@ module Make (B : Basic) = struct
           | _ -> assert false
         in
         let prm = if Mat.row_num prm = 1 then Mat.transpose prm else prm in
-        Mat.save_txt ~out:descr prm;
-        ())
+        match pos with
+        | Global -> C.root_perform (fun () -> Mat.save_txt ~out:descr prm)
+        | Local -> Mat.save_txt ~out:(descr ^ ".node" ^ Int.to_string C.rank) prm)
 end
 
 let with_prefix ?prefix s =
