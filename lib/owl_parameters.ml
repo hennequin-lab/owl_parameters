@@ -91,7 +91,7 @@ module Packer () = struct
       |> Array.transpose
       |> (fun v -> Option.value_exn v)
       |> Array.iteri ~f:(fun i xi ->
-             let xi = xi |> Owl.Mat.concatenate ~axis:0 |> Owl.Mat.sum ~axis:0 in
+             let xi = xi |> Owl.Mat.concatenate ~axis:0 |> Owl.Mat.mean ~axis:0 in
              Owl.Mat.set_slice shared.(i) theta xi)
 
 
