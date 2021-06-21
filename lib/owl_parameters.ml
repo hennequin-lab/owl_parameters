@@ -89,8 +89,7 @@ module Packer () = struct
       |> Array.map ~f:(fun slice -> Owl.Mat.get_slice slice theta)
       |> C.allgather (* n_nodes x n_slices *)
       |> Array.transpose
-      |> fun v ->
-      Option.value_exn v
+      |> (fun v -> Option.value_exn v)
       |> Array.iteri ~f:(fun i xi ->
              let xi = xi |> Owl.Mat.concatenate ~axis:0 |> Owl.Mat.sum ~axis:0 in
              Owl.Mat.set_slice shared.(i) theta xi)
@@ -143,7 +142,7 @@ module Packer () = struct
       in
       v := Owl.Mat.create 1 1 x :: !v;
       let ii = !i in
-      add_shared_slice p [ []; [ ii ] ];
+      add_shared_slice p [ [ 0 ]; [ ii ] ];
       fun theta ->
         let y = Maths.get_item theta 0 ii in
         let y =
@@ -169,7 +168,7 @@ module Packer () = struct
       v := x :: !v;
       let ii = !i in
       let n = Owl.Mat.numel x in
-      add_shared_slice p [ []; [ ii; ii + n - 1 ] ];
+      add_shared_slice p [ [ 0 ]; [ ii; ii + n - 1 ] ];
       let f theta =
         let y = Maths.get_slice [ [ 0 ]; [ ii; ii + n - 1 ] ] theta in
         let y = Maths.reshape y s in
