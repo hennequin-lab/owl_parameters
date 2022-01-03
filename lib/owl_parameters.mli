@@ -39,7 +39,7 @@ module type T = sig
 
   val pack : (module Packer) -> p -> ph
   val unpack : ph -> AD.t -> p
-  val save_to_files : ?prefix:String.t -> prms:p -> unit
+  val save_to_files : ?zip:bool -> ?prefix:String.t -> p -> unit
 end
 
 val with_prefix : ?prefix:String.t -> String.t -> String.t

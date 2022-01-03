@@ -154,7 +154,7 @@ module type T = sig
 
   val pack : (module Packer) -> p -> ph
   val unpack : ph -> AD.t -> p
-  val save_to_files : ?prefix:String.t -> prms:p -> unit
+  val save_to_files : ?zip:bool -> ?prefix:String.t -> p -> unit
 end
 
 module Make (B : Basic) = struct
@@ -166,7 +166,27 @@ module Make (B : Basic) = struct
   let pack (module P : Packer) prms = map prms ~f:P.pack
   let unpack (h : ph) v = map h ~f:(fun h -> h v)
 
-  let save_to_files ?prefix ~(prms : p) =
+  let save_zip_mat ?(sep = "\t") ~out x =
+    let open Owl_dense_matrix_generic in
+    (* will be AND'ed with user's umask *)
+    let _op = Owl_utils.elt_to_str (kind x) in
+    let h = Gzip.open_out ~level:9 out in
+    let cr = Bytes.of_string "\n" in
+    Stdlib.Fun.protect
+      (fun () ->
+        iter_rows
+          (fun y ->
+            iter
+              (fun z ->
+                let s = Bytes.of_string (Printf.sprintf "%s%s" (_op z) sep) in
+                Gzip.output h s 0 (Bytes.length s))
+              y;
+            Gzip.output h cr 0 (Bytes.length cr))
+          x)
+      ~finally:(fun () -> Gzip.close_out h)
+
+
+  let save_to_files ?(zip = false) ?prefix prms =
     fold ?prefix prms ~init:() ~f:(fun () (prm, descr) ->
         let prm = extract prm |> AD.primal' in
         let prm =
@@ -176,8 +196,7 @@ module Make (B : Basic) = struct
           | _ -> assert false
         in
         let prm = if Mat.row_num prm = 1 then Mat.transpose prm else prm in
-        Mat.save_txt ~out:descr prm;
-        ())
+        if zip then save_zip_mat ~out:descr prm else Mat.save_txt ~out:descr prm)
 end
 
 let with_prefix ?prefix s =
